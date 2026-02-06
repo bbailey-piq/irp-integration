@@ -9,59 +9,12 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from helpers.constants import WORKSPACE_PATH
-from helpers.sqlserver import execute_query_from_file, sql_file_exists
-
 from .client import Client
 from .constants import CREATE_PORTFOLIO, GET_GEOHAZ_JOB, SEARCH_PORTFOLIOS, GEOHAZ_PORTFOLIO, WORKFLOW_COMPLETED_STATUSES, WORKFLOW_IN_PROGRESS_STATUSES, SEARCH_ACCOUNTS_BY_PORTFOLIO
 from .exceptions import IRPAPIError, IRPJobError, IRPValidationError
 from .validators import validate_list_not_empty, validate_non_empty_string, validate_positive_int
 from .utils import extract_id_from_location_header
 
-
-def resolve_cycle_type_directory(cycle_type: str) -> str:
-    """
-    Resolve the cycle type to a portfolio_mapping subdirectory name.
-
-    Logic:
-    - If cycle_type contains 'test' (case-insensitive), look for 'test' directory
-    - Otherwise, look for directory matching cycle_type (case-insensitive)
-    - Raises IRPValidationError if no matching directory exists
-
-    Args:
-        cycle_type: Cycle type from configuration (e.g., 'Quarterly', 'Annual', 'Test_Q1')
-
-    Returns:
-        Actual directory name as it exists on filesystem (e.g., 'quarterly', 'annual', 'test')
-
-    Raises:
-        IRPValidationError: If no matching directory exists
-    """
-    cycle_type_lower = cycle_type.lower()
-
-    # If cycle type contains 'test', use test directory
-    if 'test' in cycle_type_lower:
-        target_dir = 'test'
-    else:
-        target_dir = cycle_type_lower
-
-    # Find directory case-insensitively
-    portfolio_mapping_base = WORKSPACE_PATH / 'sql' / 'portfolio_mapping'
-
-    if not portfolio_mapping_base.exists():
-        raise IRPValidationError(
-            f"Portfolio mapping base directory not found: {portfolio_mapping_base}"
-        )
-
-    # Look for a directory that matches case-insensitively
-    for item in portfolio_mapping_base.iterdir():
-        if item.is_dir() and item.name.lower() == target_dir:
-            return item.name  # Return actual directory name
-
-    raise IRPValidationError(
-        f"Portfolio mapping directory not found for cycle type '{cycle_type}'. "
-        f"Expected directory: portfolio_mapping/{target_dir}"
-    )
 
 class PortfolioManager:
     """Manager for portfolio operations."""
@@ -100,7 +53,7 @@ class PortfolioManager:
         """
         validate_positive_int(exposure_id, "exposure_id")
 
-        params = {'limit': limit, 'offset': offset}
+        params: Dict[str, Any] = {'limit': limit, 'offset': offset}
         if filter:
             params['filter'] = filter
 
@@ -566,109 +519,3 @@ class PortfolioManager:
                     f"Batch geohaz jobs did not complete within {timeout} seconds"
                 )
             time.sleep(interval)
-
-
-    def execute_portfolio_mapping(
-        self,
-        portfolio_name: str,
-        edm_name: str,
-        import_file: str,
-        cycle_type: str,
-        connection_name: str = 'DATABRIDGE'
-    ) -> Dict[str, Any]:
-        """
-        Execute portfolio mapping SQL script to create sub-portfolios.
-
-        This is a synchronous operation that executes SQL scripts stored in
-        workspace/sql/portfolio_mapping/{cycle_type}/ directory.
-
-        Args:
-            portfolio_name: Name of the portfolio to map
-            edm_name: Name of the EDM containing the portfolio
-            import_file: Import file identifier (used to locate SQL script)
-            cycle_type: Cycle type (e.g., 'Quarterly', 'Annual') - determines SQL directory
-            connection_name: SQL Server connection name (default: 'DATABRIDGE')
-
-        Returns:
-            Dict containing:
-                - status: 'FINISHED' or 'SKIPPED'
-                - message: Description of result
-                - result_sets_count: Number of result sets returned (if executed)
-                - sql_script: Script details
-                - parameters: SQL parameters used (if executed)
-
-        Raises:
-            IRPValidationError: If inputs are invalid or cycle_type directory not found
-            IRPAPIError: If EDM or portfolio lookup fails, or SQL execution fails
-        """
-        validate_non_empty_string(portfolio_name, "portfolio_name")
-        validate_non_empty_string(edm_name, "edm_name")
-        validate_non_empty_string(import_file, "import_file")
-        validate_non_empty_string(cycle_type, "cycle_type")
-
-        # Resolve cycle type directory
-        cycle_type_dir = resolve_cycle_type_directory(cycle_type)
-
-        # Look up EDM to get exposure_id and full database name
-        edms = self.edm_manager.search_edms(filter=f"exposureName=\"{edm_name}\"")
-        if len(edms) != 1:
-            raise IRPAPIError(f"Expected 1 EDM with name '{edm_name}', found {len(edms)}")
-        try:
-            exposure_id = edms[0]['exposureId']
-            edm_full_name = edms[0]['databaseName']
-        except (KeyError, IndexError, TypeError) as e:
-            raise IRPAPIError(f"Failed to extract EDM details for '{edm_name}': {e}") from e
-
-        # Look up portfolio to get portfolio_id
-        portfolios = self.search_portfolios(exposure_id=exposure_id, filter=f"portfolioName=\"{portfolio_name}\"")
-        if len(portfolios) != 1:
-            raise IRPAPIError(f"Expected 1 portfolio with name '{portfolio_name}', found {len(portfolios)}")
-        try:
-            portfolio_id = portfolios[0]['portfolioId']
-        except (KeyError, IndexError, TypeError) as e:
-            raise IRPAPIError(f"Failed to extract portfolio ID for '{portfolio_name}': {e}") from e
-
-        # Build SQL script path with cycle type directory
-        sql_script_name = f"2b_Query_To_Create_Sub_Portfolios_{import_file}_RMS_BackEnd.sql"
-        sql_script_path = f"portfolio_mapping/{cycle_type_dir}/{sql_script_name}"
-
-        # Check if script exists - if not, skip this portfolio
-        if not sql_file_exists(sql_script_path):
-            return {
-                'status': 'SKIPPED',
-                'message': f'SQL script not found for "{portfolio_name}" - skipping mapping',
-                'sql_script': {
-                    'script_name': sql_script_name,
-                    'script_path': sql_script_path,
-                    'status': 'NOT_FOUND'
-                }
-            }
-
-        # Prepare SQL parameters
-        params = {
-            "EDM_FULL_NAME": edm_full_name,
-            "PORTFOLIO_ID": portfolio_id,
-            "DATETIME_VALUE": datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        }
-
-        # Execute SQL script
-        try:
-            result_sets = execute_query_from_file(
-                file_path=sql_script_path,
-                params=params,
-                connection=connection_name
-            )
-
-            return {
-                'status': 'FINISHED',
-                'message': f'Portfolio mapping executed successfully for "{portfolio_name}"',
-                'result_sets_count': len(result_sets) if result_sets else 0,
-                'sql_script': {
-                    'script_name': sql_script_name,
-                    'script_path': sql_script_path,
-                    'status': 'EXECUTED'
-                },
-                'parameters': params
-            }
-        except Exception as e:
-            raise IRPAPIError(f"Failed to execute portfolio mapping for '{portfolio_name}': {e}") from e
