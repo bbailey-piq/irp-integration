@@ -642,7 +642,7 @@ class EDMManager:
         except Exception as e:
             raise IRPAPIError(f"Failed to get import job status for job ID {job_id}: {e}")
 
-    def poll_edm_import_job_to_completion(
+    def poll_import_job_to_completion(
         self,
         job_id: int,
         interval: int = 10,

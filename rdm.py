@@ -6,13 +6,14 @@ Handles exporting analysis results to RDM via databridge.
 
 import os
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 from helpers.irp_integration.utils import extract_id_from_location_header
 from .client import Client
-from .constants import CREATE_RDM_EXPORT_JOB, GET_EXPORT_JOB, SEARCH_DATABASES, WORKFLOW_COMPLETED_STATUSES, DELETE_RDM, GET_DATABRIDGE_JOB, UPDATE_GROUP_ACCESS
+from .constants import CREATE_RDM_EXPORT_JOB, GET_EXPORT_JOB, SEARCH_DATABASES, WORKFLOW_COMPLETED_STATUSES, DELETE_RDM, GET_DATABRIDGE_JOB, UPDATE_GROUP_ACCESS, SEARCH_IMPORTED_RDMS, CREATE_IMPORT_FOLDER, SUBMIT_IMPORT_JOB
 from .exceptions import IRPAPIError, IRPJobError
-from .validators import validate_non_empty_string, validate_list_not_empty, validate_positive_int
+from .validators import validate_non_empty_string, validate_list_not_empty, validate_positive_int, validate_file_exists
+from .s3 import S3Manager
 
 class RDMManager:
     """Manager for RDM export operations."""
@@ -641,3 +642,107 @@ class RDMManager:
             raise IRPAPIError(
                 f"Failed to add group access to RDM '{database_name}': {e}"
             ) from e
+    
+    def search_imported_rdms(self, filter: str = "", limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Search imported RDMs.
+
+        Args:
+            filter: Optional filter string (e.g., 'name="MyRDM"')
+            limit: Maximum results per page (default: 100)
+            offset: Offset for pagination (default: 0)
+
+        Returns:
+            List of imported RDM records
+
+        Raises:
+            IRPAPIError: If request fails
+        """
+        params: Dict[str, Any] = {'limit': limit, 'offset': offset}
+        if filter:
+            params['filter'] = filter
+
+        try:
+            response = self.client.request('GET', SEARCH_IMPORTED_RDMS, params=params)
+            return response.json()
+        except Exception as e:
+            raise IRPAPIError(f"Failed to search imported RDMs: {e}") from e
+        
+    def submit_rdm_import_job(
+        self,
+        rdm_name: str,
+        edm_name: str,
+        rdm_file_path: str
+    ) -> Tuple[int, Dict[str, Any]]:
+        """
+        Submit RDM import job with S3 file upload.
+
+        This method handles the complete RDM import workflow:
+        1. Search EDMs to get the resource URI
+        2. Create import folder (get S3 credentials)
+        3. Upload RDM .bak file to S3
+        4. Submit import job
+
+        Args:
+            edm_name: Name of the EDM to import into
+            rdm_file_path: Path to the .bak file to import
+
+        Returns:
+            Tuple of (job_id, request_body) where request_body is the HTTP request payload
+
+        Raises:
+            IRPValidationError: If parameters are invalid
+            IRPFileError: If file upload fails
+            IRPAPIError: If API calls fail
+        """
+        validate_non_empty_string(rdm_name, "rdm_name")
+        validate_non_empty_string(edm_name, "edm_name")
+        validate_file_exists(rdm_file_path, "rdm_file_path")
+
+        s3_manager = S3Manager()
+
+        # Step 1: Search EDMs to get resource URI
+        edms = self.edm_manager.search_edms(filter=f'exposureName="{edm_name}"')
+        if not edms:
+            raise IRPAPIError(f"EDM '{edm_name}' not found")
+        try:
+            resource_uri = edms[0]['uri']
+        except (KeyError, TypeError, IndexError) as e:
+            raise IRPAPIError(f"Failed to extract resource URI from EDM: {e}") from e
+
+        # Step 2: Create import folder
+        folder_data = {
+            "folderType": "RDM",
+            "properties": {
+                "fileExtension": "bak"
+            }
+        }
+        response = self.client.request('POST', CREATE_IMPORT_FOLDER, json=folder_data)
+        folder_response = response.json()
+
+        try:
+            folder_id = folder_response['folderId']
+            folder_type = folder_response['folderType']
+            upload_details = folder_response['uploadDetails']['resultsFile']
+        except (KeyError, TypeError) as e:
+            raise IRPAPIError(
+                f"Create import folder response missing required fields: {e}"
+            ) from e
+
+        # Step 3: Upload file to S3
+        s3_manager.upload_file(rdm_file_path, upload_details)
+
+        # Step 4: Submit import job
+        settings = {
+            "folderId": int(folder_id),
+            "rdmName": rdm_name
+        }
+        import_data = {
+            "importType": folder_type,
+            "resourceUri": resource_uri,
+            "settings": settings
+        }
+        response = self.client.request('POST', SUBMIT_IMPORT_JOB, json=import_data)
+        job_id = extract_id_from_location_header(response, "RDM import job submission")
+
+        return int(job_id), import_data
