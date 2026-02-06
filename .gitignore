@@ -1,1 +1,8 @@
+# Claude files
 CLAUDE.md
+
+# Env File
+.env
+
+# Pycache
+__pycache__/
