@@ -57,10 +57,10 @@ class EDMManager:
     @property
     def risk_data_job_manager(self):
         """Lazy-loaded risk data job manager to avoid circular imports."""
-        if self._job_manager is None:
+        if self._risk_data_job_manager is None:
             from .risk_data_job import RiskDataJobManager
-            self._job_manager = RiskDataJobManager(self.client)
-        return self._job_manager
+            self._risk_data_job_manager = RiskDataJobManager(self.client)
+        return self._risk_data_job_manager
 
 
     def validate_unique_edms(self, edm_names: List[str]) -> None:
