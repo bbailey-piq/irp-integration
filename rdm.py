@@ -8,7 +8,7 @@ import os
 import time
 from typing import Dict, List, Any, Optional, Tuple
 
-from helpers.irp_integration.utils import extract_id_from_location_header
+from .utils import extract_id_from_location_header
 from .client import Client
 from .constants import CREATE_RDM_EXPORT_JOB, GET_EXPORT_JOB, SEARCH_DATABASES, WORKFLOW_COMPLETED_STATUSES, DELETE_RDM, GET_DATABRIDGE_JOB, UPDATE_GROUP_ACCESS, SEARCH_IMPORTED_RDMS, CREATE_IMPORT_FOLDER, SUBMIT_IMPORT_JOB
 from .exceptions import IRPAPIError, IRPJobError
