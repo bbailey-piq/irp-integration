@@ -244,10 +244,10 @@ class S3Manager:
             logger.info("Download complete: %s", destination_path)
 
         except requests.RequestException as e:
-            logger.error("Failed to download from URL: %s", e, exc_info=True)
+            logger.error("Failed to download from URL: %s", e)
             raise IRPFileError(f"Failed to download from URL: {e}")
         except IOError as e:
-            logger.error("Failed to write file '%s': %s", destination_path, e, exc_info=True)
+            logger.error("Failed to write file '%s': %s", destination_path, e)
             raise IRPFileError(f"Failed to write file '{destination_path}': {e}")
 
     def download_from_url_to_fileobj(
@@ -285,10 +285,10 @@ class S3Manager:
             logger.info("Download complete")
 
         except requests.RequestException as e:
-            logger.error("Failed to download from URL: %s", e, exc_info=True)
+            logger.error("Failed to download from URL: %s", e)
             raise IRPFileError(f"Failed to download from URL: {e}")
         except IOError as e:
-            logger.error("Failed to write to file object: %s", e, exc_info=True)
+            logger.error("Failed to write to file object: %s", e)
             raise IRPFileError(f"Failed to write to file object: {e}")
 
     # =========================================================================
@@ -443,7 +443,8 @@ class S3Manager:
             IRPFileError: If upload fails
         """
         try:
-            logger.info("Uploading file %s to s3://%s/%s...", file_path, bucket, key)
+            logger.info("Uploading file to S3...")
+            logger.debug("Upload target: s3://%s/%s", bucket, key)
 
             session = boto3.Session(
                 aws_access_key_id=credentials['aws_access_key_id'],
@@ -467,7 +468,7 @@ class S3Manager:
             logger.error("File not found: %s", file_path)
             raise IRPFileError(f"File not found: {file_path}")
         except Exception as e:
-            logger.error("Failed to upload file to S3: %s", e, exc_info=True)
+            logger.error("Failed to upload file to S3: %s", e)
             raise IRPFileError(f"Failed to upload file to S3: {e}")
 
     def _upload_fileobj_to_s3(
@@ -492,7 +493,8 @@ class S3Manager:
             IRPFileError: If upload fails
         """
         try:
-            logger.info("Uploading file object to s3://%s/%s...", bucket, key)
+            logger.info("Uploading file object to S3...")
+            logger.debug("Upload target: s3://%s/%s", bucket, key)
 
             session = boto3.Session(
                 aws_access_key_id=credentials['aws_access_key_id'],
@@ -513,5 +515,5 @@ class S3Manager:
             logger.info("File uploaded successfully")
 
         except Exception as e:
-            logger.error("Failed to upload file object to S3: %s", e, exc_info=True)
+            logger.error("Failed to upload file object to S3: %s", e)
             raise IRPFileError(f"Failed to upload file object to S3: {e}")
