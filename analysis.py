@@ -5,6 +5,7 @@ Handles portfolio analysis submission, job tracking, and analysis group creation
 """
 
 import json
+import logging
 import time
 from typing import Dict, List, Any, Optional, Tuple
 from .client import Client
@@ -19,6 +20,8 @@ from .constants import (
 from .exceptions import IRPAPIError, IRPJobError, IRPReferenceDataError, IRPValidationError
 from .validators import validate_non_empty_string, validate_positive_int, validate_list_not_empty
 from .utils import extract_id_from_location_header
+
+logger = logging.getLogger(__name__)
 
 class AnalysisManager:
     """Manager for analysis operations."""
@@ -201,6 +204,8 @@ class AnalysisManager:
         validate_non_empty_string(output_profile_name, "output_profile_name")
         # event_rate_scheme_name validation deferred - required for DLM but optional for HD
 
+        logger.info("Submitting analysis job '%s' for '%s'/'%s'", job_name, edm_name, portfolio_name)
+
         # Check if analysis name already exists (unless skipped for batch operations)
         if not skip_duplicate_check:
             analysis_response = self.search_analyses(filter=f"analysisName = \"{job_name}\" AND exposureName = \"{edm_name}\"")
@@ -343,6 +348,7 @@ class AnalysisManager:
         try:
             response = self.client.request('POST', CREATE_ANALYSIS_JOB, json=data)
             job_id = extract_id_from_location_header(response, "analysis job submission")
+            logger.info("Analysis job submitted — job ID: %s", job_id)
             return int(job_id), data
         except Exception as e:
             raise IRPAPIError(f"Failed to submit analysis job '{job_name}' for portfolio {portfolio_name}: {e}")
@@ -741,6 +747,8 @@ class AnalysisManager:
         validate_non_empty_string(group_name, "group_name")
         validate_list_not_empty(analysis_names, "analysis_names")
 
+        logger.info("Submitting analysis grouping job '%s' with %s analyses", group_name, len(analysis_names))
+
         # Initialize defaults
         if analysis_edm_map is None:
             analysis_edm_map = {}
@@ -843,6 +851,7 @@ class AnalysisManager:
         try:
             response = self.client.request('POST', CREATE_ANALYSIS_GROUP, json=data)
             job_id = extract_id_from_location_header(response, "analysis group creation")
+            logger.info("Analysis grouping job submitted — job ID: %s", job_id)
             return {
                 'job_id': int(job_id),
                 'skipped': False,
@@ -905,7 +914,7 @@ class AnalysisManager:
 
         start = time.time()
         while True:
-            print(f"Polling analysis grouping job ID {job_id}")
+            logger.info("Polling analysis grouping job ID %s", job_id)
             job_data = self.get_analysis_grouping_job(job_id)
             try:
                 status = job_data['status']
@@ -914,11 +923,12 @@ class AnalysisManager:
                 raise IRPAPIError(
                     f"Missing 'status' or 'progress' in job response for job ID {job_id}: {e}"
                 ) from e
-            print(f"Job status: {status}; Percent complete: {progress}")
+            logger.info("Job %s status: %s; progress: %s", job_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
-            
+
             if time.time() - start > timeout:
+                logger.error("Analysis grouping job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"Analysis grouping job ID {job_id} did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -953,7 +963,7 @@ class AnalysisManager:
 
         start = time.time()
         while True:
-            print(f"Polling batch grouping job ids: {','.join(str(item) for item in job_ids)}")
+            logger.info("Polling batch grouping job IDs: %s", ",".join(str(item) for item in job_ids))
 
             all_completed = False
             all_jobs = []
@@ -975,6 +985,7 @@ class AnalysisManager:
                 return all_jobs
             
             if time.time() - start > timeout:
+                logger.error("Batch grouping jobs timed out after %s seconds", timeout)
                 raise IRPJobError(
                     f"Batch grouping jobs did not complete within {timeout} seconds"
                 )
@@ -1032,7 +1043,7 @@ class AnalysisManager:
 
         start = time.time()
         while True:
-            print(f"Polling analysis job ID {job_id}")
+            logger.info("Polling analysis job ID %s", job_id)
             job_data = self.get_analysis_job(job_id)
             try:
                 status = job_data['status']
@@ -1041,11 +1052,12 @@ class AnalysisManager:
                 raise IRPAPIError(
                     f"Missing 'status' or 'progress' in job response for job ID {job_id}: {e}"
                 ) from e
-            print(f"Job status: {status}; Percent complete: {progress}")
+            logger.info("Job %s status: %s; progress: %s", job_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
-            
+
             if time.time() - start > timeout:
+                logger.error("Analysis job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"Analysis job ID {job_id} did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -1109,7 +1121,7 @@ class AnalysisManager:
 
         start = time.time()
         while True:
-            print(f"Polling batch analysis ids: {','.join(str(item) for item in job_ids)}")
+            logger.info("Polling batch analysis job IDs: %s", ",".join(str(item) for item in job_ids))
 
             # Fetch all workflows across all pages
             all_jobs = []
@@ -1144,6 +1156,7 @@ class AnalysisManager:
                 return all_jobs
 
             if time.time() - start > timeout:
+                logger.error("Batch analysis jobs timed out after %s seconds", timeout)
                 raise IRPJobError(
                     f"Batch analysis jobs did not complete within {timeout} seconds"
                 )
@@ -1248,7 +1261,7 @@ class AnalysisManager:
 
         try:
             self.client.request('DELETE', DELETE_ANALYSIS.format(analysisId=analysis_id))
-            print(f"Deleted analysis ID: {analysis_id}")
+            logger.info("Deleted analysis ID: %s", analysis_id)
         except Exception as e:
             raise IRPAPIError(f"Failed to delete analysis : {e}")
 

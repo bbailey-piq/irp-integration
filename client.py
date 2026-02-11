@@ -6,6 +6,7 @@ and batch workflow execution.
 """
 
 import json
+import logging
 import requests
 import time
 import os
@@ -16,6 +17,9 @@ from .constants import  GET_WORKFLOWS, WORKFLOW_COMPLETED_STATUSES, WORKFLOW_IN_
 from .exceptions import IRPAPIError, IRPJobError, IRPWorkflowError
 from .validators import validate_list_not_empty, validate_non_empty_string, validate_positive_int
 from .utils import get_location_header
+
+logger = logging.getLogger(__name__)
+
 
 class Client:
 
@@ -29,18 +33,32 @@ class Client:
             RISK_MODELER_BASE_URL: API base URL
             RISK_MODELER_API_KEY: API authentication key
             RISK_MODELER_RESOURCE_GROUP_ID: Resource group ID
+
+        Raises:
+            IRPAPIError: If any required environment variable is missing
         """
-        self.base_url = os.environ.get('RISK_MODELER_BASE_URL', 'https://api-euw1.rms-ppe.com')
-        self.api_key = os.environ.get('RISK_MODELER_API_KEY', 'your_api_key')
-        self.resource_group_id = os.environ.get('RISK_MODELER_RESOURCE_GROUP_ID', 'your_resource_id')
-        self.headers = {
-            'Authorization': self.api_key,
-            'x-rms-resource-group-id': self.resource_group_id
-        }
+        base_url = os.environ.get('RISK_MODELER_BASE_URL')
+        api_key = os.environ.get('RISK_MODELER_API_KEY')
+        resource_group_id = os.environ.get('RISK_MODELER_RESOURCE_GROUP_ID')
+
+        missing = [name for name, val in [
+            ('RISK_MODELER_BASE_URL', base_url),
+            ('RISK_MODELER_API_KEY', api_key),
+            ('RISK_MODELER_RESOURCE_GROUP_ID', resource_group_id),
+        ] if not val]
+        if missing:
+            raise IRPAPIError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
+
+        self.base_url = base_url
         self.timeout = 200
 
         session = requests.Session()
-        session.headers.update(self.headers or {})
+        session.headers.update({
+            'Authorization': api_key,
+            'x-rms-resource-group-id': resource_group_id,
+        })
 
         retry = Retry(
             total=5,
@@ -96,29 +114,42 @@ class Client:
             else:
                 url = f"{self.base_url}/{path.lstrip('/')}"
 
+        logger.debug("%s %s", method, url)
+
         try:
             response = self.session.request(
                 method=method,
                 url=url,
                 params=params,
                 json=json,
-                headers=self.headers | headers,
+                headers=headers,
                 timeout=timeout or self.timeout,
                 stream=stream,
             )
             response.raise_for_status()
         except requests.HTTPError as e:
-            # Enrich with server message if available
-            msg = ""
+            status_code = response.status_code
+            # Extract only a safe error-message field — never log the full body
+            safe_msg = ""
             try:
                 body = response.json()
-                msg = f" | server: {body}"
+                server_msg = body.get("message") or body.get("error") or ""
+                if server_msg:
+                    safe_msg = f" | server: {str(server_msg)[:200]}"
             except Exception:
-                msg = f" | text: {response.text[:500]}"
-            raise IRPAPIError(f"HTTP request failed: {e} {msg}") from e
+                pass
+            logger.error(
+                "HTTP request failed: %s %s (status %s)%s",
+                method, url, status_code, safe_msg,
+            )
+            raise IRPAPIError(
+                f"HTTP request failed: {method} {url} (status {status_code}){safe_msg}"
+            ) from e
         except requests.RequestException as e:
+            logger.error("Request error: %s %s — %s", method, url, e)
             raise IRPAPIError(f"Request error: {e}") from e
 
+        logger.debug("%s %s — %s", method, url, response.status_code)
         return response
 
 
@@ -165,7 +196,7 @@ class Client:
 
         start = time.time()
         while True:
-            print(f"Polling risk data job ID {workflow_id}")
+            logger.info("Polling workflow ID %s", workflow_id)
             job_data = self.get_workflow(workflow_id)
             try:
                 status = job_data['status']
@@ -174,11 +205,12 @@ class Client:
                 raise IRPAPIError(
                     f"Missing 'status' or 'progress' in job response for workflow ID {workflow_id}: {e}"
                 ) from e
-            print(f"Workflow status: {status}; Percent complete: {progress}")
+            logger.info("Workflow %s status: %s; progress: %s", workflow_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
-            
+
             if time.time() - start > timeout:
+                logger.error("Workflow %s timed out after %s seconds. Last status: %s", workflow_id, timeout, status)
                 raise IRPJobError(
                     f"Risk data workflow ID {workflow_id} did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -213,17 +245,18 @@ class Client:
 
         start = time.time()
         while True:
-            print(f"Polling workflow url {workflow_url}")
+            logger.info("Polling workflow URL %s", workflow_url)
             response = self.request('GET', '', full_url=workflow_url)
             workflow_data = response.json()
             status = workflow_data.get('status', '')
             progress = workflow_data.get('progress', '')
-            print(f"Workflow status: {status}; Percent complete: {progress}")
+            logger.info("Workflow status: %s; progress: %s", status, progress)
 
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return response
 
             if time.time() - start > timeout:
+                logger.error("Workflow timed out after %s seconds. Last status: %s", timeout, status)
                 raise IRPWorkflowError(
                     f"Workflow did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -256,7 +289,7 @@ class Client:
 
         start = time.time()
         while True:
-            print(f"Polling batch workflow ids: {','.join(str(item) for item in workflow_ids)}")
+            logger.info("Polling batch workflow IDs: %s", ",".join(str(item) for item in workflow_ids))
 
             # Fetch all workflows across all pages
             all_workflows = []
@@ -304,6 +337,7 @@ class Client:
                 return response
 
             if time.time() - start > timeout:
+                logger.error("Batch workflows timed out after %s seconds", timeout)
                 raise IRPWorkflowError(
                     f"Batch workflows did not complete within {timeout} seconds"
                 )
@@ -342,7 +376,7 @@ class Client:
             IRPAPIError: If request fails
             IRPWorkflowError: If workflow times out
         """
-        print("Submitting workflow request...")
+        logger.info("Submitting workflow request...")
         response = self.request(
             method, path,
             params=params,

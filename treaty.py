@@ -5,6 +5,7 @@ Handles treaty-related operations including creation, retrieval,
 and Line of Business (LOB) assignments.
 """
 
+import logging
 from typing import Dict, List, Any, Tuple
 from .client import Client
 from .constants import (
@@ -18,6 +19,8 @@ from .constants import (
 from .exceptions import IRPAPIError, IRPValidationError, IRPReferenceDataError
 from .validators import validate_list_not_empty, validate_non_empty_string, validate_positive_int, validate_non_negative_float, validate_non_negative_int
 from .utils import extract_id_from_location_header
+
+logger = logging.getLogger(__name__)
 
 
 class TreatyManager:
@@ -262,7 +265,9 @@ class TreatyManager:
                 f"Invalid attachment_level '{attachment_level}'. Must be one of: {list(TREATY_ATTACHMENT_LEVELS.keys())}"
             )
 
+        logger.info("Creating treaty '%s' in EDM '%s'", treaty_name, edm_name)
         # Look up EDM to get exposure_id
+        logger.debug("Looking up EDM '%s'", edm_name)
         edms = self.edm_manager.search_edms(filter=f"exposureName=\"{edm_name}\"")
         if len(edms) != 1:
             raise IRPAPIError(f"Expected 1 EDM with name '{edm_name}', found {len(edms)}")
@@ -271,6 +276,7 @@ class TreatyManager:
         except (KeyError, IndexError, TypeError) as e:
             raise IRPAPIError(f"Failed to extract exposure ID for EDM '{edm_name}': {e}") from e
 
+        logger.debug("Looking up cedant for exposure ID %s", exposure_id)
         try:
             cedant_response = self.edm_manager.get_cedants_by_edm(exposure_id)
             if not cedant_response:
@@ -291,6 +297,7 @@ class TreatyManager:
         except Exception as e:
             raise IRPAPIError(f"Failed to retrieve cedants for EDM '{edm_name}': {e}")
         
+        logger.debug("Looking up currency '%s'", currency_name)
         try:
             currency_response = self.reference_data_manager.get_currency_by_name(currency_name)
             currency_data = {
@@ -331,8 +338,10 @@ class TreatyManager:
         try:
             response = self.client.request('POST', CREATE_TREATY.format(exposureId=exposure_id), json=data)
             treaty_id = extract_id_from_location_header(response, "treaty creation")
+            logger.info("Treaty created — ID: %s", treaty_id)
 
             lobs = self.edm_manager.get_lobs_by_edm(exposure_id)
+            logger.debug("Assigning %s LOBs to treaty %s", len(lobs), treaty_id)
             for lob in lobs:
                 self.create_treaty_lob(exposure_id, int(treaty_id), int(lob['lobId']), lob['lobName'])
 

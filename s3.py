@@ -230,7 +230,7 @@ class S3Manager:
         validate_non_empty_string(url, "url")
         validate_non_empty_string(destination_path, "destination_path")
 
-        logger.info(f"Downloading from URL to {destination_path}...")
+        logger.info("Downloading from URL to %s...", destination_path)
 
         try:
             response = requests.get(url, stream=True, timeout=timeout)
@@ -241,11 +241,13 @@ class S3Manager:
                     if chunk:
                         f.write(chunk)
 
-            logger.info(f"Download complete: {destination_path}")
+            logger.info("Download complete: %s", destination_path)
 
         except requests.RequestException as e:
+            logger.error("Failed to download from URL: %s", e)
             raise IRPFileError(f"Failed to download from URL: {e}")
         except IOError as e:
+            logger.error("Failed to write file '%s': %s", destination_path, e)
             raise IRPFileError(f"Failed to write file '{destination_path}': {e}")
 
     def download_from_url_to_fileobj(
@@ -283,8 +285,10 @@ class S3Manager:
             logger.info("Download complete")
 
         except requests.RequestException as e:
+            logger.error("Failed to download from URL: %s", e)
             raise IRPFileError(f"Failed to download from URL: {e}")
         except IOError as e:
+            logger.error("Failed to write to file object: %s", e)
             raise IRPFileError(f"Failed to write to file object: {e}")
 
     # =========================================================================
@@ -364,6 +368,7 @@ class S3Manager:
             if not bucket or not key:
                 raise ValueError(f"Could not extract bucket/key from URL: {upload_url}")
 
+            logger.debug("Parsed S3 URL — bucket: %s, key: %s", bucket, key)
             return bucket, key
 
         except Exception as e:
@@ -412,7 +417,9 @@ class S3Manager:
             return content_type
 
         extension = Path(file_path).suffix.lower()
-        return CONTENT_TYPE_MAP.get(extension, DEFAULT_CONTENT_TYPE)
+        resolved = CONTENT_TYPE_MAP.get(extension, DEFAULT_CONTENT_TYPE)
+        logger.debug("Resolved content type for '%s': %s", extension, resolved)
+        return resolved
 
     def _upload_to_s3(
         self,
@@ -436,7 +443,8 @@ class S3Manager:
             IRPFileError: If upload fails
         """
         try:
-            logger.info(f"Uploading file {file_path} to s3://{bucket}/{key}...")
+            logger.info("Uploading file to S3...")
+            logger.debug("Upload target: s3://%s/%s", bucket, key)
 
             session = boto3.Session(
                 aws_access_key_id=credentials['aws_access_key_id'],
@@ -457,8 +465,10 @@ class S3Manager:
             logger.info("File uploaded successfully")
 
         except FileNotFoundError:
+            logger.error("File not found: %s", file_path)
             raise IRPFileError(f"File not found: {file_path}")
         except Exception as e:
+            logger.error("Failed to upload file to S3: %s", e)
             raise IRPFileError(f"Failed to upload file to S3: {e}")
 
     def _upload_fileobj_to_s3(
@@ -483,7 +493,8 @@ class S3Manager:
             IRPFileError: If upload fails
         """
         try:
-            logger.info(f"Uploading file object to s3://{bucket}/{key}...")
+            logger.info("Uploading file object to S3...")
+            logger.debug("Upload target: s3://%s/%s", bucket, key)
 
             session = boto3.Session(
                 aws_access_key_id=credentials['aws_access_key_id'],
@@ -504,4 +515,5 @@ class S3Manager:
             logger.info("File uploaded successfully")
 
         except Exception as e:
+            logger.error("Failed to upload file object to S3: %s", e)
             raise IRPFileError(f"Failed to upload file object to S3: {e}")

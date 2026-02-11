@@ -5,6 +5,7 @@ Handles retrieval and creation of reference data including
 model profiles, output profiles, event rate schemes, currencies, and tags.
 """
 
+import logging
 from typing import Dict, List, Any
 from .client import Client
 from .constants import (
@@ -15,6 +16,8 @@ from .constants import (
 from .exceptions import IRPAPIError
 from .validators import validate_non_empty_string, validate_list_not_empty, validate_positive_int
 from .utils import extract_id_from_location_header
+
+logger = logging.getLogger(__name__)
 
 
 def _build_analysis_currency_dict(vintage: Dict[str, Any]) -> Dict[str, str]:
@@ -302,6 +305,7 @@ class ReferenceDataManager:
             latest_vintage = self.get_latest_currency_scheme_vintage()
             return _build_analysis_currency_dict(latest_vintage)
         except IRPAPIError:
+            logger.warning("Failed to get currency scheme vintage from API, using defaults")
             return _build_default_analysis_currency_dict()
 
 
@@ -378,8 +382,10 @@ class ReferenceDataManager:
         data = {"tagName": tag_name}
 
         try:
+            logger.info("Creating tag '%s'", tag_name)
             response = self.client.request('POST', CREATE_TAG, json=data)
             tag_id = extract_id_from_location_header(response, "tag creation")
+            logger.info("Tag created — ID: %s", tag_id)
             return {"id": tag_id}
         except Exception as e:
             raise IRPAPIError(f"Failed to create tag '{tag_name}': {e}")
@@ -403,6 +409,7 @@ class ReferenceDataManager:
         """
         validate_list_not_empty(tag_names, "tag_names")
 
+        logger.debug("Resolving tag IDs for: %s", tag_names)
         tag_ids = []
         for tag_name in tag_names:
             tag_search_response = self.get_tag_by_name(tag_name)

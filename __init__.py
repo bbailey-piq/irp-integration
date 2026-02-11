@@ -1,5 +1,8 @@
+import logging
 from dotenv import load_dotenv
 load_dotenv()
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 from .risk_data_job import RiskDataJobManager
 from .client import Client

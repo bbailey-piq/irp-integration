@@ -5,6 +5,7 @@ Provides a centralized interface for submitting, tracking, and polling
 platform import jobs. Uses the /platform/import/v1/jobs endpoint.
 """
 
+import logging
 import time
 from typing import Dict, Any, Optional, Tuple
 
@@ -12,6 +13,8 @@ from .client import Client
 from .constants import GET_IMPORT_JOB, WORKFLOW_COMPLETED_STATUSES
 from .exceptions import IRPAPIError, IRPJobError, IRPValidationError
 from .validators import validate_positive_int, validate_non_empty_string
+
+logger = logging.getLogger(__name__)
 
 
 class ImportJobManager:
@@ -162,7 +165,7 @@ class ImportJobManager:
 
         start = time.time()
         while True:
-            print(f"Polling import job ID {job_id}")
+            logger.info("Polling import job ID %s", job_id)
             job_data = self.get_import_job(job_id)
             try:
                 status = job_data['status']
@@ -171,11 +174,12 @@ class ImportJobManager:
                 raise IRPAPIError(
                     f"Missing 'status' in job response for job ID {job_id}: {e}"
                 ) from e
-            print(f"Job status: {status}; Percent complete: {progress}")
+            logger.info("Job %s status: %s; progress: %s", job_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
 
             if time.time() - start > timeout:
+                logger.error("Import job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"Import job ID {job_id} did not complete within {timeout} seconds. "
                     f"Last status: {status}"

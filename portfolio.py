@@ -4,6 +4,7 @@ Portfolio management operations.
 Handles portfolio creation, retrieval, and geocoding/hazard operations.
 """
 
+import logging
 import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -14,6 +15,8 @@ from .constants import GET_PORTFOLIO_BY_ID, GET_PORTFOLIO_METADATA, CREATE_PORTF
 from .exceptions import IRPAPIError, IRPJobError
 from .validators import validate_list_not_empty, validate_non_empty_string, validate_positive_int
 from .utils import extract_id_from_location_header
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioManager:
@@ -263,8 +266,10 @@ class PortfolioManager:
         }
 
         try:
+            logger.info("Creating portfolio '%s' in exposure ID %s", portfolio_name, exposure_id)
             response = self.client.request('POST', CREATE_PORTFOLIO.format(exposureId=exposure_id), json=data)
             portfolio_id = extract_id_from_location_header(response, "portfolio creation")
+            logger.info("Portfolio created — ID: %s", portfolio_id)
             return int(portfolio_id), data
         except Exception as e:
             raise IRPAPIError(f"Failed to create portfolio '{portfolio_name}' in exposure id '{exposure_id}': {e}")
@@ -435,12 +440,14 @@ class PortfolioManager:
             )
 
         try:
+            logger.info("Submitting GeoHaz job for portfolio '%s'", portfolio_name)
             response = self.client.request(
                 'POST',
                 GEOHAZ_PORTFOLIO,
                 json=data
             )
             job_id = extract_id_from_location_header(response, "portfolio geohaz")
+            logger.info("GeoHaz job submitted — job ID: %s", job_id)
             return int(job_id), data
         except Exception as e:
             raise IRPAPIError(f"Failed to execute geohaz for portfolio '{portfolio_uri}': {e}")
@@ -497,7 +504,7 @@ class PortfolioManager:
 
         start = time.time()
         while True:
-            print(f"Polling GeoHaz job ID {job_id}")
+            logger.info("Polling GeoHaz job ID %s", job_id)
             job_data = self.get_geohaz_job(job_id)
             try:
                 status = job_data['status']
@@ -506,11 +513,12 @@ class PortfolioManager:
                 raise IRPAPIError(
                     f"Missing 'status' or 'progress' in job response for job ID {job_id}: {e}"
                 ) from e
-            print(f"Job status: {status}; Percent complete: {progress}")
+            logger.info("GeoHaz job %s status: %s; progress: %s", job_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
-            
+
             if time.time() - start > timeout:
+                logger.error("GeoHaz job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"GeoHaz job ID {job_id} did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -545,7 +553,7 @@ class PortfolioManager:
 
         start = time.time()
         while True:
-            print(f"Polling batch geohaz job ids: {','.join(str(item) for item in job_ids)}")
+            logger.info("Polling batch GeoHaz job IDs: %s", ",".join(str(item) for item in job_ids))
 
             all_completed = False
             all_jobs = []
@@ -567,6 +575,7 @@ class PortfolioManager:
                 return all_jobs
             
             if time.time() - start > timeout:
+                logger.error("Batch GeoHaz jobs timed out after %s seconds", timeout)
                 raise IRPJobError(
                     f"Batch geohaz jobs did not complete within {timeout} seconds"
                 )

@@ -4,6 +4,7 @@ RDM (Risk Data Model) export operations.
 Handles exporting analysis results to RDM via databridge.
 """
 
+import logging
 import os
 import time
 from typing import Dict, List, Any, Optional, Tuple
@@ -14,6 +15,8 @@ from .constants import CREATE_RDM_EXPORT_JOB, GET_EXPORT_JOB, SEARCH_DATABASES, 
 from .exceptions import IRPAPIError, IRPJobError
 from .validators import validate_non_empty_string, validate_list_not_empty, validate_positive_int, validate_file_exists
 from .s3 import S3Manager
+
+logger = logging.getLogger(__name__)
 
 class RDMManager:
     """Manager for RDM export operations."""
@@ -131,6 +134,8 @@ class RDMManager:
         validate_non_empty_string(server_name, "server_name")
         validate_non_empty_string(rdm_name, "rdm_name")
         validate_list_not_empty(analysis_names, "analysis_names")
+
+        logger.info("Submitting RDM export job '%s' on server '%s' with %s analyses", rdm_name, server_name, len(analysis_names))
 
         # Initialize defaults
         if analysis_edm_map is None:
@@ -255,6 +260,7 @@ class RDMManager:
         try:
             response = self.client.request('POST', CREATE_RDM_EXPORT_JOB, json=data)
             job_id = extract_id_from_location_header(response, "analysis job submission")
+            logger.info("RDM export job submitted — job ID: %s", job_id)
             return {
                 'job_id': int(job_id),
                 'skipped': False,
@@ -317,7 +323,7 @@ class RDMManager:
 
         start = time.time()
         while True:
-            print(f"Polling RDM export job ID {job_id}")
+            logger.info("Polling RDM export job ID %s", job_id)
             job_data = self.get_rdm_export_job(job_id)
             try:
                 status = job_data['status']
@@ -326,11 +332,12 @@ class RDMManager:
                 raise IRPAPIError(
                     f"Missing 'status' or 'progress' in job response for job ID {job_id}: {e}"
                 ) from e
-            print(f"Job status: {status}; Percent complete: {progress}")
+            logger.info("Job %s status: %s; progress: %s", job_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
-            
+
             if time.time() - start > timeout:
+                logger.error("RDM export job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"RDM Export job ID {job_id} did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -480,6 +487,8 @@ class RDMManager:
         validate_non_empty_string(rdm_name, "rdm_name")
         validate_non_empty_string(server_name, "server_name")
 
+        logger.info("Submitting delete RDM job for '%s' on server '%s'", rdm_name, server_name)
+
         # Get the full RDM name (with random suffix)
         rdm_full_name = self.get_rdm_database_full_name(rdm_name, server_name)
 
@@ -561,9 +570,9 @@ class RDMManager:
 
         start = time.time()
         while True:
-            print(f"Polling delete RDM job ID {job_id}")
+            logger.info("Polling delete RDM job ID %s", job_id)
             status = self.get_databridge_job(job_id)
-            print(f"Job status: {status}")
+            logger.info("Job %s status: %s", job_id, status)
 
             # Check if job completed successfully
             if status == success_status:
@@ -577,6 +586,7 @@ class RDMManager:
 
             # Check timeout
             if time.time() - start > timeout:
+                logger.error("Delete RDM job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"Delete RDM job ID {job_id} did not complete within {timeout} seconds. Last status: {status}"
                 )

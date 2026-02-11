@@ -6,6 +6,7 @@ Files are uploaded to S3 and import jobs are submitted through the
 /platform/import/v1 endpoints.
 """
 
+import logging
 import os
 from typing import Dict, Any, Optional, Tuple
 
@@ -15,6 +16,8 @@ from .exceptions import IRPAPIError
 from .validators import validate_non_empty_string, validate_file_exists
 from .s3 import S3Manager
 from .utils import extract_id_from_location_header
+
+logger = logging.getLogger(__name__)
 
 
 class MRIImportManager:
@@ -91,7 +94,7 @@ class MRIImportManager:
         s3_manager = S3Manager()
 
         # Step 1: Look up EDM
-        print(f"Looking up EDM: {edm_name}")
+        logger.debug("Looking up EDM '%s'", edm_name)
         edms = self.edm_manager.search_edms(filter=f"exposureName=\"{edm_name}\"")
         if len(edms) != 1:
             raise IRPAPIError(f"Expected 1 EDM with name {edm_name}, found {len(edms)}")
@@ -103,7 +106,7 @@ class MRIImportManager:
             ) from e
 
         # Step 2: Look up portfolio
-        print(f"Looking up portfolio: {portfolio_name}")
+        logger.debug("Looking up portfolio '%s'", portfolio_name)
         portfolios = self.portfolio_manager.search_portfolios(
             exposure_id=exposure_id,
             filter=f"portfolioName=\"{portfolio_name}\""
@@ -135,7 +138,7 @@ class MRIImportManager:
                 "fileTypes": file_types
             }
         }
-        print("Creating import folder...")
+        logger.debug("Creating import folder")
         response = self.client.request('POST', CREATE_IMPORT_FOLDER, json=folder_data)
         folder_response = response.json()
 
@@ -148,14 +151,14 @@ class MRIImportManager:
             ) from e
 
         # Step 4: Upload files to S3
-        print(f"Uploading accounts file: {os.path.basename(accounts_file_path)}")
+        logger.debug("Uploading accounts file: %s", os.path.basename(accounts_file_path))
         try:
             accounts_upload = upload_details['accountsFile']
         except KeyError as e:
             raise IRPAPIError(f"Upload details missing accountsFile: {e}") from e
         s3_manager.upload_file(accounts_file_path, accounts_upload)
 
-        print(f"Uploading locations file: {os.path.basename(locations_file_path)}")
+        logger.debug("Uploading locations file: %s", os.path.basename(locations_file_path))
         try:
             locations_upload = upload_details['locationsFile']
         except KeyError as e:
@@ -163,7 +166,7 @@ class MRIImportManager:
         s3_manager.upload_file(locations_file_path, locations_upload)
 
         if mapping_file_path is not None:
-            print(f"Uploading mapping file: {os.path.basename(mapping_file_path)}")
+            logger.debug("Uploading mapping file: %s", os.path.basename(mapping_file_path))
             try:
                 mapping_upload = upload_details['mappingFile']
             except KeyError as e:
@@ -181,9 +184,9 @@ class MRIImportManager:
             "settings": settings
         }
 
-        print(f"Submitting import job for {edm_name}/{portfolio_name}...")
+        logger.info("Submitting MRI import job for '%s'/'%s'", edm_name, portfolio_name)
         response = self.client.request('POST', SUBMIT_IMPORT_JOB, json=import_data)
         job_id = extract_id_from_location_header(response, "MRI import job submission")
 
-        print(f"Import job submitted with job ID: {job_id}")
+        logger.info("MRI import job submitted — job ID: %s", job_id)
         return int(job_id), import_data

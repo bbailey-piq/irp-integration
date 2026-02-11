@@ -6,12 +6,15 @@ platform risk data jobs via the unified /platform/riskdata/v1/jobs endpoint.
 """
 
 import json
+import logging
 import time
 from typing import Any, Dict, List
 from .client import Client
 from .constants import GET_RISK_DATA_JOB_BY_ID, SEARCH_RISK_DATA_JOBS, WORKFLOW_COMPLETED_STATUSES, WORKFLOW_IN_PROGRESS_STATUSES
 from .exceptions import IRPAPIError, IRPJobError
 from .validators import validate_list_not_empty, validate_positive_int
+
+logger = logging.getLogger(__name__)
 
 
 class RiskDataJobManager:
@@ -92,7 +95,7 @@ class RiskDataJobManager:
 
         start = time.time()
         while True:
-            print(f"Polling risk data job ID {job_id}")
+            logger.info("Polling risk data job ID %s", job_id)
             job_data = self.get_risk_data_job(job_id)
             try:
                 status = job_data['status']
@@ -101,11 +104,12 @@ class RiskDataJobManager:
                 raise IRPAPIError(
                     f"Missing 'status' or 'progress' in job response for job ID {job_id}: {e}"
                 ) from e
-            print(f"Job status: {status}; Percent complete: {progress}")
+            logger.info("Job %s status: %s; progress: %s", job_id, status, progress)
             if status in WORKFLOW_COMPLETED_STATUSES:
                 return job_data
-            
+
             if time.time() - start > timeout:
+                logger.error("Risk data job %s timed out after %s seconds. Last status: %s", job_id, timeout, status)
                 raise IRPJobError(
                     f"Risk data job ID {job_id} did not complete within {timeout} seconds. Last status: {status}"
                 )
@@ -140,7 +144,7 @@ class RiskDataJobManager:
 
         start = time.time()
         while True:
-            print(f"Polling batch risk data job ids: {','.join(str(item) for item in job_ids)}")
+            logger.info("Polling batch risk data job IDs: %s", ",".join(str(item) for item in job_ids))
 
             # Fetch all workflows across all pages
             all_jobs = []
@@ -178,6 +182,7 @@ class RiskDataJobManager:
                 return all_jobs
 
             if time.time() - start > timeout:
+                logger.error("Batch risk data jobs timed out after %s seconds", timeout)
                 raise IRPJobError(
                     f"Batch risk data jobs did not complete within {timeout} seconds"
                 )

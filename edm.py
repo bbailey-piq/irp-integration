@@ -6,6 +6,7 @@ associated data retrieval (cedants, LOBs).
 """
 
 import json
+import logging
 import time
 from typing import Dict, Any, List, Optional, Tuple
 from .client import Client
@@ -14,6 +15,9 @@ from .exceptions import IRPAPIError, IRPJobError, IRPReferenceDataError
 from .validators import validate_non_empty_string, validate_positive_int, validate_list_not_empty, validate_file_exists
 from .utils import extract_id_from_location_header
 from .s3 import S3Manager
+
+logger = logging.getLogger(__name__)
+
 
 class EDMManager:
     """Manager for EDM (Exposure Data Management) operations."""
@@ -276,12 +280,14 @@ class EDMManager:
             "serverId": database_server_id
         }
         try:
+            logger.info("Submitting EDM creation job for '%s' on server '%s'", edm_name, server_name)
             response = self.client.request(
                 'POST',
                 CREATE_EDM.format(exposureSetId=exposure_set_id),
                 json=data
             )
             job_id = extract_id_from_location_header(response, "EDM creation")
+            logger.info("EDM creation job submitted — job ID: %s", job_id)
             return int(job_id), data
         except Exception as e:
             raise IRPAPIError(f"Failed to create EDM '{edm_name}': {e}")
@@ -393,7 +399,7 @@ class EDMManager:
 
         start = time.time()
         while True:
-            print(f"Polling batch upgrade edm version job ids: {','.join(str(item) for item in job_ids)}")
+            logger.info("Polling batch EDM upgrade job IDs: %s", ",".join(str(item) for item in job_ids))
 
             all_completed = False
             all_jobs = []
@@ -415,6 +421,7 @@ class EDMManager:
                 return all_jobs
             
             if time.time() - start > timeout:
+                logger.error("Batch EDM upgrade jobs timed out after %s seconds", timeout)
                 raise IRPJobError(
                     f"Batch upgrade edm version jobs did not complete within {timeout} seconds"
                 )
@@ -436,6 +443,7 @@ class EDMManager:
             IRPAPIError: If EDM not found or deletion fails
         """
         validate_non_empty_string(edm_name, "edm_name")
+        logger.info("Deleting EDM '%s' and associated analyses", edm_name)
 
         edms = self.search_edms(filter=f"exposureName=\"{edm_name}\"")
         if (len(edms) != 1):
@@ -448,6 +456,7 @@ class EDMManager:
             ) from e
 
         analyses = self.analysis_manager.search_analyses(filter=f"exposureName=\"{edm_name}\"")
+        logger.info("Found %s analyses to delete for EDM '%s'", len(analyses), edm_name)
         for analysis in analyses:
             try:
                 self.analysis_manager.delete_analysis(analysis['analysisId'])
@@ -558,6 +567,7 @@ class EDMManager:
         validate_file_exists(edm_file_path, "edm_file_path")
         validate_non_empty_string(server_name, "server_name")
         
+        logger.info("Submitting EDM import job for '%s'", edm_name)
         s3_manager = S3Manager()
 
         # Look up database server
@@ -569,6 +579,7 @@ class EDMManager:
         except (KeyError, TypeError, IndexError) as e:
             raise IRPAPIError(f"Failed to extract server ID: {e}") from e
 
+        logger.debug("Creating import folder for EDM '%s'", edm_name)
         # Step 1: Create import folder
         folder_data = {
             "folderType": "EDM",
@@ -590,6 +601,7 @@ class EDMManager:
             ) from e
 
         # Step 2: Upload file to S3
+        logger.debug("Uploading EDM file '%s' to S3", edm_file_path)
         s3_manager.upload_file(edm_file_path, upload_details)
 
         # Step 3: Create or get existing exposure set
@@ -617,5 +629,6 @@ class EDMManager:
         }
         response = self.client.request('POST', SUBMIT_IMPORT_JOB, json=import_data)
         job_id = extract_id_from_location_header(response, "EDM import job submission")
+        logger.info("EDM import job submitted — job ID: %s", job_id)
 
         return int(job_id), import_data
