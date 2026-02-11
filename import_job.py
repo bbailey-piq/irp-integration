@@ -15,15 +15,16 @@ from .validators import validate_positive_int, validate_non_empty_string
 
 
 class ImportJobManager:
-    """Manager for platform import job operations (EDM, RDM)."""
+    """Manager for platform import job operations (EDM, RDM, MRI)."""
 
-    VALID_IMPORT_TYPES = {"EDM", "RDM"}
+    VALID_IMPORT_TYPES = {"EDM", "RDM", "MRI"}
 
     def __init__(
         self,
         client: Client,
         edm_manager: Optional[Any] = None,
-        rdm_manager: Optional[Any] = None
+        rdm_manager: Optional[Any] = None,
+        mri_manager: Optional[Any] = None
     ) -> None:
         """
         Initialize ImportJobManager.
@@ -36,6 +37,7 @@ class ImportJobManager:
         self.client = client
         self._edm_manager = edm_manager
         self._rdm_manager = rdm_manager
+        self._mri_manager = mri_manager
 
     @property
     def edm_manager(self):
@@ -52,13 +54,21 @@ class ImportJobManager:
             from .rdm import RDMManager
             self._rdm_manager = RDMManager(self.client)
         return self._rdm_manager
+    
+    @property
+    def mri_manager(self):
+        """Lazy-loaded MRI manager to avoid circular imports."""
+        if self._mri_manager is None:
+            from .mri_import import MRIImportManager
+            self._mri_manager = MRIImportManager(self.client)
+        return self._mri_manager
 
     def submit_job(self, import_type: str, **kwargs) -> Tuple[int, Dict[str, Any]]:
         """
         Submit an import job, routing to the appropriate manager based on type.
 
         Args:
-            import_type: Type of import - "EDM" or "RDM"
+            import_type: Type of import - "EDM", "RDM", or "MRI"
             **kwargs: Arguments passed to the underlying submit method.
 
                 For EDM (routed to EDMManager.submit_edm_import_job):
@@ -70,6 +80,14 @@ class ImportJobManager:
                     rdm_name (str): Name for the RDM
                     edm_name (str): Name of the target EDM
                     rdm_file_path (str): Path to the .bak file
+
+                For MRI (routed to MRIImportManager.submit_mri_import_job):
+                    edm_name (str): Target EDM name
+                    portfolio_name (str): Target portfolio name
+                    accounts_file_path (str): Path to accounts CSV file
+                    locations_file_path (str): Path to locations CSV file
+                    mapping_file_path (str, optional): Path to .mff mapping file
+                    delimiter (str): File delimiter (default: "TAB")
 
         Returns:
             Tuple of (job_id, request_body)
@@ -89,8 +107,10 @@ class ImportJobManager:
 
         if import_type_upper == "EDM":
             return self.edm_manager.submit_edm_import_job(**kwargs)
-        else:
+        elif import_type_upper == "RDM":
             return self.rdm_manager.submit_rdm_import_job(**kwargs)
+        else:
+            return self.mri_manager.submit_mri_import_job(**kwargs)
 
     def get_import_job(self, job_id: int) -> Dict[str, Any]:
         """
