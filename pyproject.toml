@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "irp-integration"
+version = "0.1.0"
+description = "Python client library for Moody's Intelligent Risk Platform (IRP) APIs"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Ben Bailey", email = "bbailey@premiumiq.com" },
+    { name = "Anil Venugopal", email = "avenugopal@premiumiq.com" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "requests>=2.28.0",
+    "boto3>=1.26.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/premiumiq/irp-integration"
+Repository = "https://github.com/premiumiq/irp-integration"
+Issues = "https://github.com/premiumiq/irp-integration/issues"
+
+[tool.setuptools.packages.find]
+include = ["irp_integration*"]
