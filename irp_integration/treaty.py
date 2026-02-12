@@ -74,7 +74,7 @@ class TreatyManager:
             IRPAPIError: If API request fails
         """
         validate_positive_int(exposure_id, "exposure_id")
-        params = {'limit': limit, 'offset': offset}
+        params: Dict[str, Any] = {'limit': limit, 'offset': offset}
         if filter:
             params['filter'] = filter
         try:

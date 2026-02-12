@@ -6,3 +6,9 @@ CLAUDE.md
 
 # Pycache
 __pycache__/
+
+# Build/packaging artifacts
+dist/
+build/
+*.egg-info/
+*.egg

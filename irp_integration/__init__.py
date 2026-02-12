@@ -1,6 +1,14 @@
+"""
+Python client library for Moody's Risk Modeler API.
+
+Provides a clean interface for insurance risk analysis operations including
+exposure data management (EDM), portfolio operations, MRI imports,
+treaty management, and analysis execution.
+"""
+
 import logging
-from dotenv import load_dotenv
-load_dotenv()
+
+__version__ = "0.1.0"
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -16,8 +24,8 @@ from .rdm import RDMManager
 from .import_job import ImportJobManager
 
 class IRPClient:
-    """Main client for IRP integration providing access to all managers"""
-    
+    """Main client for IRP integration providing access to all managers."""
+
     def __init__(self):
         self._client = Client()
         self.risk_data_job = RiskDataJobManager(self._client)
@@ -32,7 +40,7 @@ class IRPClient:
 
     @property
     def client(self):
-        """Get the underlying API client"""
+        """Get the underlying API client."""
         return self._client
 
-__all__ = ['IRPClient']
+__all__ = ['IRPClient', '__version__']

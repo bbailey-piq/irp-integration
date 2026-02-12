@@ -41,15 +41,12 @@ class Client:
         api_key = os.environ.get('RISK_MODELER_API_KEY')
         resource_group_id = os.environ.get('RISK_MODELER_RESOURCE_GROUP_ID')
 
-        missing = [name for name, val in [
-            ('RISK_MODELER_BASE_URL', base_url),
-            ('RISK_MODELER_API_KEY', api_key),
-            ('RISK_MODELER_RESOURCE_GROUP_ID', resource_group_id),
-        ] if not val]
-        if missing:
-            raise IRPAPIError(
-                f"Missing required environment variables: {', '.join(missing)}"
-            )
+        if not base_url:
+            raise IRPAPIError("Missing required environment variable: RISK_MODELER_BASE_URL")
+        if not api_key:
+            raise IRPAPIError("Missing required environment variable: RISK_MODELER_API_KEY")
+        if not resource_group_id:
+            raise IRPAPIError("Missing required environment variable: RISK_MODELER_RESOURCE_GROUP_ID")
 
         self.base_url = base_url
         self.timeout = 200
