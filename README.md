@@ -1,6 +1,8 @@
 # irp-integration
 
-A Python client library for the [Moody's Intelligent Risk Platform (IRP) APIs](https://developer.rms.com/). Provides a clean interface for managing and executing common risk analysis operations.
+A Python client library for the [Moody's Intelligent Risk Platform (IRP) APIs](https://developer.rms.com/). Built to serve as a foundation for larger Moody's integration projects — use it with Jupyter Notebooks, Azure Functions, or any orchestration layer to build end-to-end risk analysis workflows.
+
+Not all Moody's API functionality is covered yet, but the most common operations are available and the library is actively maintained. Contributions are welcome — feel free to fork and modify to fit your project's needs.
 
 ## Installation
 
@@ -63,8 +65,9 @@ client = IRPClient()
 ## Features
 
 - **Automatic retry** with exponential backoff for transient errors (429, 5xx)
-- **Job polling** for long-running async operations (submit, poll, complete)
-- **Batch job monitoring** for parallel operations
+- **Workflow polling** — submit long-running operations and automatically poll to completion
+- **Batch workflow execution** — run multiple workflows in parallel and wait for all to finish
+- **Structured logging** via Python's `logging` module for visibility into API calls and workflow progress
 - **Connection pooling** via persistent HTTP sessions
 - **Input validation** with descriptive error messages
 - **Custom exception hierarchy** for structured error handling
