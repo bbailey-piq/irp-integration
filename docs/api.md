@@ -13,6 +13,7 @@ Python client library for Moody's Risk Modeler API. Provides managers for exposu
 - [RDMManager](#rdmmanager)
 - [RiskDataJobManager](#riskdatajobmanager)
 - [ImportJobManager](#importjobmanager)
+- [ExportJobManager](#exportjobmanager)
 - [S3Manager](#s3manager)
 - [ReferenceDataManager](#referencedatamanager)
 - [Exceptions](#exceptions)
@@ -965,7 +966,7 @@ def get_analysis_by_app_analysis_id(self, app_analysis_id: int) -> Dict[str, Any
 
 Retrieve analysis by application analysis ID (the ID used in the UI).
 
-**Returns:** Dict containing `analysisId`, `exposureResourceId`, `analysisName`, `engineType`, and `raw` (full response).
+**Returns:** Dict containing `analysisId`, `exposureResourceId`, `analysisName`, `engineType`, `uri`, and `raw` (full response).
 
 ---
 
@@ -1378,6 +1379,33 @@ Retrieve region/peril breakdown for an analysis or group. Used to build the `reg
 
 ---
 
+### `submit_analysis_export_job`
+
+```python
+def submit_analysis_export_job(
+    self,
+    analysis_id: int,
+    loss_details: List[Dict[str, Any]],
+    file_extension: str = "PARQUET"
+) -> Tuple[int, Dict[str, Any]]
+```
+
+Submit an analysis results export job. Accepts either an `analysisId` or `appAnalysisId` — tries `analysisId` first, then falls back to `appAnalysisId`. Resolves the analysis to a resource URI and submits the export to the platform export API.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `analysis_id` | Analysis ID or app analysis ID |
+| `loss_details` | List of loss detail configs, each with `metricType`, `outputLevels`, and `perspectiveCodes` |
+| `file_extension` | Export file format (default: `"PARQUET"`) |
+
+**Returns:** Tuple of `(job_id, request_body)`.
+
+**Raises:** `IRPAPIError` if analysis not found or request fails.
+
+---
+
 ## RDMManager
 
 Manager for RDM (Results Data Mart) export and import operations including database management and group access.
@@ -1763,6 +1791,76 @@ Poll an import job until completion or timeout.
 **Returns:** Final job status dict.
 
 **Raises:** `IRPJobError` on timeout.
+
+---
+
+## ExportJobManager
+
+Manager for platform export job operations including status retrieval, polling, and result download.
+
+### `get_export_job`
+
+```python
+def get_export_job(self, job_id: int) -> Dict[str, Any]
+```
+
+Get export job status by job ID.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `job_id` | Export job ID |
+
+**Returns:** Dict containing job status details.
+
+---
+
+### `poll_export_job_to_completion`
+
+```python
+def poll_export_job_to_completion(
+    self,
+    job_id: int,
+    interval: int = 10,
+    timeout: int = 600000
+) -> Dict[str, Any]
+```
+
+Poll an export job until completion or timeout.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `job_id` | Export job ID |
+| `interval` | Polling interval in seconds (default: 10) |
+| `timeout` | Maximum timeout in seconds (default: 600000) |
+
+**Returns:** Final job status dict.
+
+**Raises:** `IRPJobError` on timeout.
+
+---
+
+### `download_export_results`
+
+```python
+def download_export_results(self, job_id: int, output_dir: str) -> str
+```
+
+Download exported analysis results for a completed export job. Extracts the `downloadUrl` from the `DOWNLOAD_RESULTS` task and streams the zip file to the output directory. Creates the output directory if it doesn't exist.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `job_id` | Export job ID (must be FINISHED) |
+| `output_dir` | Directory to save the downloaded file |
+
+**Returns:** Path to the downloaded file.
+
+**Raises:** `IRPJobError` if job is not finished. `IRPAPIError` if download URL not found or download fails.
 
 ---
 

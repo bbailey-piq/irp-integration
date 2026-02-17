@@ -15,7 +15,7 @@ from .constants import (
     SEARCH_ANALYSIS_JOBS, SEARCH_ANALYSIS_RESULTS,
     WORKFLOW_COMPLETED_STATUSES, WORKFLOW_IN_PROGRESS_STATUSES,
     GET_ANALYSIS_ELT, GET_ANALYSIS_EP, GET_ANALYSIS_STATS, GET_ANALYSIS_PLT,
-    GET_ANALYSIS_REGIONS, PERSPECTIVE_CODES
+    GET_ANALYSIS_REGIONS, PERSPECTIVE_CODES, CREATE_EXPORT_JOB
 )
 from .exceptions import IRPAPIError, IRPJobError, IRPReferenceDataError, IRPValidationError
 from .validators import validate_non_empty_string, validate_positive_int, validate_list_not_empty
@@ -1293,6 +1293,7 @@ class AnalysisManager:
                 'exposureResourceId': analysis.get('exposureResourceId'),
                 'analysisName': analysis.get('analysisName'),
                 'engineType': analysis.get('engineType'),  # 'HD' or 'DLM'
+                'uri': analysis.get('uri'),
                 'raw': analysis
             }
         except IRPAPIError:
@@ -1538,3 +1539,60 @@ class AnalysisManager:
             return response.json()
         except Exception as e:
             raise IRPAPIError(f"Failed to get regions for analysis {analysis_id}: {e}")
+        
+    def submit_analysis_export_job(
+        self,
+        analysis_id: int,
+        loss_details: List[Dict[str, Any]],
+        file_extension: str = "PARQUET"
+    ) -> Tuple[int, Dict[str, Any]]:
+        """
+        Submit an analysis results export job.
+
+        Args:
+            analysis_id: List of analysis IDs to export
+            loss_details: List of loss detail configurations, each containing:
+                - metricType: str (e.g., "LOSS_TABLES")
+                - outputLevels: List[str] (e.g., ["Portfolio"])
+                - perspectiveCodes: List[str] (e.g., ["GU", "GR"])
+            file_extension: Export file format (default: "PARQUET")
+
+        Returns:
+            Tuple of (job_id, request_body)
+
+        Raises:
+            IRPValidationError: If inputs are invalid
+            IRPAPIError: If any analysis doesn't exist or request fails
+        """
+        validate_positive_int(analysis_id, "analysis_id")
+        validate_list_not_empty(loss_details, "loss_details")
+
+        resource_uris = []
+
+        # Validate analysis exists
+        results = self.search_analyses(filter=f"analysisId={analysis_id}")
+        if not results:
+            results = self.search_analyses(filter=f"appAnalysisId={analysis_id}")
+        if not results:
+            raise IRPAPIError(f"Analysis with ID {analysis_id} not found")
+        resource_uris.append(results[0]['uri'])
+
+        data = {
+            "exportType": "RESULTS",
+            "resourceUris": resource_uris,
+            "resourceType": "analyses",
+            "settings": {
+                "fileExtension": file_extension,
+                "lossDetails": loss_details
+            }
+        }
+
+        try:
+            response = self.client.request('POST', CREATE_EXPORT_JOB, json=data)
+            job_id = extract_id_from_location_header(response, "analysis export job")
+            logger.info("Analysis export job submitted — job ID: %s", job_id)
+            return int(job_id), data
+        except IRPAPIError:
+            raise
+        except Exception as e:
+            raise IRPAPIError(f"Failed to submit analysis export job: {e}")

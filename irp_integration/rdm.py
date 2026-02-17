@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 from .utils import extract_id_from_location_header
 from .client import Client
-from .constants import CREATE_RDM_EXPORT_JOB, GET_EXPORT_JOB, SEARCH_DATABASES, WORKFLOW_COMPLETED_STATUSES, DELETE_RDM, GET_DATABRIDGE_JOB, UPDATE_GROUP_ACCESS, SEARCH_IMPORTED_RDMS, CREATE_IMPORT_FOLDER, SUBMIT_IMPORT_JOB
+from .constants import CREATE_EXPORT_JOB, GET_EXPORT_JOB, SEARCH_DATABASES, WORKFLOW_COMPLETED_STATUSES, DELETE_RDM, GET_DATABRIDGE_JOB, UPDATE_GROUP_ACCESS, SEARCH_IMPORTED_RDMS, CREATE_IMPORT_FOLDER, SUBMIT_IMPORT_JOB
 from .exceptions import IRPAPIError, IRPJobError
 from .validators import validate_non_empty_string, validate_list_not_empty, validate_positive_int, validate_file_exists
 from .s3 import S3Manager
@@ -258,7 +258,7 @@ class RDMManager:
         }
 
         try:
-            response = self.client.request('POST', CREATE_RDM_EXPORT_JOB, json=data)
+            response = self.client.request('POST', CREATE_EXPORT_JOB, json=data)
             job_id = extract_id_from_location_header(response, "analysis job submission")
             logger.info("RDM export job submitted — job ID: %s", job_id)
             return {

@@ -1,8 +1,10 @@
 # API Endpoint Constants
 
-# Workflow / Job endpoints
+# Workflow endpoints
 GET_WORKFLOWS = '/riskmodeler/v1/workflows'
 GET_WORKFLOW_BY_ID = '/riskmodeler/v1/workflows/{workflow_id}'
+
+# Risk Data Job endpoints
 GET_RISK_DATA_JOB_BY_ID = '/platform/riskdata/v1/jobs/{job_id}'
 SEARCH_RISK_DATA_JOBS = '/platform/riskdata/v1/jobs'
 
@@ -26,11 +28,6 @@ CREATE_IMPORT_FOLDER = '/platform/import/v1/folders'
 SUBMIT_IMPORT_JOB = '/platform/import/v1/jobs'
 GET_IMPORT_JOB = '/platform/import/v1/jobs/{jobId}'
 SEARCH_IMPORTED_RDMS = '/platform/riskdata/v1/analyses/imported-rdms'
-
-# MRI Import Endpoints
-CREATE_AWS_BUCKET = '/riskmodeler/v1/storage'
-CREATE_MAPPING = '/riskmodeler/v1/imports/createmapping/{bucket_id}'
-EXECUTE_IMPORT = '/riskmodeler/v1/imports'
 
 # Portfolio endpoints
 SEARCH_PORTFOLIOS = '/platform/riskdata/v1/exposures/{exposureId}/portfolios'
@@ -94,8 +91,6 @@ GET_TAGS = '/platform/referencedata/v1/tags'
 CREATE_TAG = '/platform/referencedata/v1/tags'
 
 # RDM endpoints
-CREATE_RDM_EXPORT_JOB = '/platform/export/v1/jobs'
-GET_EXPORT_JOB = '/platform/export/v1/jobs/{jobId}'
 SEARCH_DATABASES = '/platform/riskdata/v1/dataservers/{serverId}/databases'
 DELETE_RDM = '/databridge/v1/sql-instances/{instanceName}/databases/{rdmName}'
 GET_DATABRIDGE_JOB = '/databridge/v1/jobs/{jobId}'
@@ -109,3 +104,7 @@ SEARCH_CURRENCY_SCHEME_VINTAGES = '/data-store/referencetables/currencyschemevin
 SEARCH_SIMULATION_SETS = '/data-store/referenceTables/SimulationSet'
 SEARCH_PET_METADATA = '/data-store/referenceTables/PETMetadata'
 SEARCH_SOFTWARE_MODEL_VERSION_MAP = '/data-store/referenceTables/SoftwareModelVersionMap'
+
+# Export endpoints
+CREATE_EXPORT_JOB = '/platform/export/v1/jobs'
+GET_EXPORT_JOB = '/platform/export/v1/jobs/{jobId}'

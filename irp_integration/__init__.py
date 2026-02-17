@@ -8,7 +8,7 @@ treaty management, and analysis execution.
 
 import logging
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -22,6 +22,7 @@ from .treaty import TreatyManager
 from .reference_data import ReferenceDataManager
 from .rdm import RDMManager
 from .import_job import ImportJobManager
+from .export_job import ExportJobManager
 
 class IRPClient:
     """Main client for IRP integration providing access to all managers."""
@@ -37,6 +38,7 @@ class IRPClient:
         self.reference_data = ReferenceDataManager(self._client)
         self.rdm = RDMManager(self._client)
         self.import_job = ImportJobManager(self._client)
+        self.export_job = ExportJobManager(self._client)
 
     @property
     def client(self):

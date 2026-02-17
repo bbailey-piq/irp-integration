@@ -86,6 +86,7 @@ client = IRPClient()
 | `client.rdm` | Results Data Mart — export analysis results to RDM |
 | `client.risk_data_job` | Risk data job status tracking |
 | `client.import_job` | Platform import job management (EDM/RDM imports) |
+| `client.export_job` | Platform export job management — status, polling, and result download |
 | `client.reference_data` | Tags, currencies, and other reference data lookups |
 
 ## Error Handling
