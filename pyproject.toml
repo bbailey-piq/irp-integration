@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "irp-integration"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Python client library for Moody's Intelligent Risk Platform (IRP) APIs"
 readme = "README.md"
 license = "MIT"
@@ -37,3 +37,7 @@ Issues = "https://github.com/premiumiq/irp-integration/issues"
 
 [tool.setuptools.packages.find]
 include = ["irp_integration*"]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
