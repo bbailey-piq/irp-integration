@@ -16,6 +16,7 @@ Python client library for Moody's Risk Modeler API. Provides managers for exposu
 - [ExportJobManager](#exportjobmanager)
 - [S3Manager](#s3manager)
 - [ReferenceDataManager](#referencedatamanager)
+- [DataBridgeManager](#databridgemanager)
 - [Exceptions](#exceptions)
 - [Common Patterns](#common-patterns)
 
@@ -2330,6 +2331,274 @@ Get model version with precise matching using engine version, region code, and p
 
 ---
 
+## DataBridgeManager
+
+Manager for SQL Server (Data Bridge) operations. Provides direct SQL connectivity via pyodbc with parameterized query execution.
+
+Unlike other managers, DataBridgeManager does not depend on the HTTP Client. It connects directly to SQL Server and can be used standalone or via `client.databridge`.
+
+**Requires:** `pip install irp-integration[databridge]` and [Microsoft ODBC Driver 18 for SQL Server](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server).
+
+### Constructor
+
+```python
+DataBridgeManager(default_connection: str = 'TEST')
+```
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `default_connection` | Default connection name used when no connection is specified in method calls |
+
+**Environment variables (per connection):**
+
+| Variable | Required | Description |
+|---|---|---|
+| `MSSQL_{NAME}_SERVER` | Yes | Server hostname or IP |
+| `MSSQL_{NAME}_USER` | Yes | SQL Server username |
+| `MSSQL_{NAME}_PASSWORD` | Yes | SQL Server password |
+| `MSSQL_{NAME}_PORT` | No | Port (default: 1433) |
+
+**Global environment variables:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `MSSQL_DRIVER` | `ODBC Driver 18 for SQL Server` | ODBC driver name |
+| `MSSQL_TRUST_CERT` | `yes` | Trust server certificate |
+| `MSSQL_TIMEOUT` | `30` | Connection timeout in seconds |
+
+---
+
+### `get_connection_config`
+
+```python
+def get_connection_config(self, connection_name: Optional[str] = None) -> Dict[str, str]
+```
+
+Get connection configuration for a named MSSQL connection from environment variables.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `connection_name` | Name of the connection (e.g., `'DATABRIDGE'`). Defaults to the manager's `default_connection`. |
+
+**Returns:** Dictionary with connection parameters (server, port, driver, user, password, etc.).
+
+**Raises:** `IRPValidationError` if required environment variables are missing.
+
+---
+
+### `build_connection_string`
+
+```python
+def build_connection_string(self, connection_name: Optional[str] = None, database: Optional[str] = None) -> str
+```
+
+Build ODBC connection string for SQL Server.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `connection_name` | Name of the connection. Defaults to the manager's `default_connection`. |
+| `database` | Optional database name to include in the connection string |
+
+**Returns:** ODBC connection string.
+
+---
+
+### `get_connection`
+
+```python
+@contextmanager
+def get_connection(self, connection_name: Optional[str] = None, database: Optional[str] = None)
+```
+
+Context manager for SQL Server database connections. Automatically handles connection lifecycle.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `connection_name` | Name of the connection. Defaults to the manager's `default_connection`. |
+| `database` | Optional database name to connect to |
+
+**Yields:** `pyodbc.Connection` object.
+
+**Raises:** `IRPDataBridgeConnectionError` if connection fails.
+
+---
+
+### `test_connection`
+
+```python
+def test_connection(self, connection_name: Optional[str] = None) -> bool
+```
+
+Test if a SQL Server connection is working.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `connection_name` | Name of the connection to test. Defaults to the manager's `default_connection`. |
+
+**Returns:** `True` if connection successful, `False` otherwise.
+
+---
+
+### `execute_query`
+
+```python
+def execute_query(
+    self,
+    query: str,
+    params: Optional[Dict[str, Any]] = None,
+    connection: Optional[str] = None,
+    database: Optional[str] = None
+) -> pd.DataFrame
+```
+
+Execute SELECT query and return results as DataFrame. Supports `{{ param_name }}` parameter placeholders.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `query` | SQL SELECT query (supports `{{ param_name }}` placeholders) |
+| `params` | Query parameters as dictionary |
+| `connection` | SQL Server connection name. Defaults to the manager's `default_connection`. |
+| `database` | Optional database name |
+
+**Returns:** pandas DataFrame with query results.
+
+**Raises:** `IRPDataBridgeQueryError` if query execution fails.
+
+---
+
+### `execute_scalar`
+
+```python
+def execute_scalar(
+    self,
+    query: str,
+    params: Optional[Dict[str, Any]] = None,
+    connection: Optional[str] = None,
+    database: Optional[str] = None
+) -> Any
+```
+
+Execute query and return single scalar value (first column of first row).
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `query` | SQL query returning single value |
+| `params` | Query parameters |
+| `connection` | SQL Server connection name. Defaults to the manager's `default_connection`. |
+| `database` | Optional database name |
+
+**Returns:** Single value from query result (or `None` if no results).
+
+**Raises:** `IRPDataBridgeQueryError` if query execution fails.
+
+---
+
+### `execute_command`
+
+```python
+def execute_command(
+    self,
+    query: str,
+    params: Optional[Dict[str, Any]] = None,
+    connection: Optional[str] = None,
+    database: Optional[str] = None
+) -> int
+```
+
+Execute non-query command (INSERT, UPDATE, DELETE) and return rows affected.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `query` | SQL command |
+| `params` | Query parameters |
+| `connection` | SQL Server connection name. Defaults to the manager's `default_connection`. |
+| `database` | Optional database name |
+
+**Returns:** Number of rows affected.
+
+**Raises:** `IRPDataBridgeQueryError` if command execution fails.
+
+---
+
+### `execute_query_from_file`
+
+```python
+def execute_query_from_file(
+    self,
+    file_path: str,
+    params: Optional[Dict[str, Any]] = None,
+    connection: Optional[str] = None,
+    database: Optional[str] = None
+) -> List[pd.DataFrame]
+```
+
+Execute SQL query from file and return results as list of DataFrames. Handles multi-statement scripts (e.g., scripts with USE statements followed by SELECT). Each result set is returned as a separate DataFrame.
+
+**Args:**
+
+| Parameter | Description |
+|---|---|
+| `file_path` | Path to SQL file (absolute or relative to cwd) |
+| `params` | Query parameters (supports `{{ param_name }}` placeholders) |
+| `connection` | SQL Server connection name. Defaults to the manager's `default_connection`. |
+| `database` | Optional database name |
+
+**Returns:** List of pandas DataFrames, one per result set.
+
+**Raises:** `IRPValidationError` if file does not exist. `IRPDataBridgeQueryError` if query execution fails.
+
+---
+
+### Parameter Substitution
+
+SQL queries and scripts support named parameters using `{{ param_name }}` syntax. Parameters are context-aware:
+
+**Value contexts** (escaped and quoted):
+```sql
+SELECT * FROM table WHERE id = {{ user_id }} AND name = {{ user_name }}
+-- With params={'user_id': 123, 'user_name': 'John'}
+-- Becomes: SELECT * FROM table WHERE id = 123 AND name = 'John'
+```
+
+**Identifier contexts** (raw substitution, no quoting):
+```sql
+-- Inside square brackets:
+USE [{{ db_name }}]
+-- Becomes: USE [my_database]
+
+-- As part of table names:
+SELECT * FROM CombinedData_{{ date_val }}_Working
+-- Becomes: SELECT * FROM CombinedData_20250115_Working
+
+-- Inside string literals:
+SELECT 'Modeling_{{ date_val }}_Moodys' as table_name
+-- Becomes: SELECT 'Modeling_202501_Moodys' as table_name
+```
+
+**SQL injection protection:**
+- String values have single quotes escaped (doubled)
+- Numeric values are inserted directly
+- NULL values produce the `NULL` keyword
+- Identifier values are validated to contain only safe characters
+
+---
+
 ## Exceptions
 
 | Exception | Description |
@@ -2341,8 +2610,11 @@ Get model version with precise matching using engine version, region code, and p
 | `IRPReferenceDataError` | Reference data lookup failures |
 | `IRPFileError` | File operation failures (not found, upload errors) |
 | `IRPJobError` | Job management errors (submission, polling, timeout) |
+| `IRPDataBridgeError` | Data Bridge (SQL Server) base error |
+| `IRPDataBridgeConnectionError` | SQL Server connection failures (bad credentials, unreachable server) |
+| `IRPDataBridgeQueryError` | SQL query execution failures, parameter substitution errors |
 
-All exceptions inherit from `IRPIntegrationError`.
+All exceptions inherit from `IRPIntegrationError`. Data Bridge exceptions inherit from `IRPDataBridgeError`.
 
 ---
 

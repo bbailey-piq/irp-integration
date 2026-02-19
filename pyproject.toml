@@ -27,6 +27,9 @@ dependencies = [
     "boto3>=1.26.0",
 ]
 
+[project.optional-dependencies]
+databridge = ["pyodbc>=4.0.0"]
+
 [project.urls]
 Homepage = "https://github.com/premiumiq/irp-integration"
 Repository = "https://github.com/premiumiq/irp-integration"

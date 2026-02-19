@@ -10,6 +10,14 @@ Not all Moody's API functionality is covered yet, but the most common operations
 pip install irp-integration
 ```
 
+To include Data Bridge (SQL Server) support:
+
+```bash
+pip install irp-integration[databridge]
+```
+
+> **Note:** Data Bridge requires [Microsoft ODBC Driver 18 for SQL Server](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server) to be installed on your system.
+
 ## Quick Start
 
 ```python
@@ -62,6 +70,66 @@ from irp_integration import IRPClient
 client = IRPClient()
 ```
 
+### Data Bridge Configuration
+
+The Data Bridge module (`client.databridge`) connects directly to Moody's SQL Server databases via ODBC. It requires separate setup from the REST API.
+
+**Prerequisites:**
+
+1. Install the optional dependency: `pip install irp-integration[databridge]`
+2. Install [Microsoft ODBC Driver 18 for SQL Server](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server):
+   - **Windows:** Download and run the MSI installer from Microsoft
+   - **Linux (Debian/Ubuntu):** `sudo apt-get install -y unixodbc-dev && sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18`
+   - **macOS:** `brew install microsoft/mssql-release/msodbcsql18`
+
+**Environment variables (per connection):**
+
+Each named connection uses the prefix `MSSQL_{CONNECTION_NAME}_`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MSSQL_{NAME}_SERVER` | Yes | Server hostname or IP |
+| `MSSQL_{NAME}_USER` | Yes | SQL Server username |
+| `MSSQL_{NAME}_PASSWORD` | Yes | SQL Server password |
+| `MSSQL_{NAME}_PORT` | No | Port (default: 1433) |
+
+**Global settings:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MSSQL_DRIVER` | `ODBC Driver 18 for SQL Server` | ODBC driver name |
+| `MSSQL_TRUST_CERT` | `yes` | Trust server certificate |
+| `MSSQL_TIMEOUT` | `30` | Connection timeout in seconds |
+
+**Example:**
+
+```bash
+# .env file
+MSSQL_DATABRIDGE_SERVER=databridge.company.com
+MSSQL_DATABRIDGE_USER=svc_account
+MSSQL_DATABRIDGE_PASSWORD=secretpassword
+```
+
+```python
+from irp_integration.databridge import DataBridgeManager
+
+db = DataBridgeManager(default_connection='DATABRIDGE')
+
+# Inline query with parameters
+df = db.execute_query(
+    "SELECT * FROM portfolios WHERE value > {{ min_value }}",
+    params={'min_value': 1000000},
+    database='DataWarehouse'
+)
+
+# Execute SQL script from file
+results = db.execute_query_from_file(
+    'C:/sql/extract_policies.sql',
+    params={'cycle_name': 'Q1-2025'},
+    database='AnalyticsDB'
+)
+```
+
 ## Features
 
 - **Automatic retry** with exponential backoff for transient errors (429, 5xx)
@@ -72,6 +140,7 @@ client = IRPClient()
 - **Input validation** with descriptive error messages
 - **Custom exception hierarchy** for structured error handling
 - **S3 upload/download** with multipart transfer support
+- **Data Bridge (SQL Server)** — direct SQL execution against Moody's Data Bridge with parameterized queries and file-based scripts
 - **Type hints** on all public methods
 
 ## Modules
@@ -87,6 +156,7 @@ client = IRPClient()
 | `client.risk_data_job` | Risk data job status tracking |
 | `client.import_job` | Platform import job management (EDM/RDM imports) |
 | `client.export_job` | Platform export job management — status, polling, and result download |
+| `client.databridge` | Data Bridge (SQL Server) — parameterized queries, file-based SQL execution |
 | `client.reference_data` | Tags, currencies, and other reference data lookups |
 
 ## Error Handling
@@ -95,13 +165,16 @@ The library uses a custom exception hierarchy:
 
 ```python
 from irp_integration.exceptions import (
-    IRPIntegrationError,     # Base exception
-    IRPAPIError,             # HTTP/API errors
-    IRPValidationError,      # Input validation failures
-    IRPWorkflowError,        # Workflow execution failures
-    IRPReferenceDataError,   # Reference data lookup failures
-    IRPFileError,            # File operation failures
-    IRPJobError,             # Job management errors
+    IRPIntegrationError,          # Base exception
+    IRPAPIError,                  # HTTP/API errors
+    IRPValidationError,           # Input validation failures
+    IRPWorkflowError,             # Workflow execution failures
+    IRPReferenceDataError,        # Reference data lookup failures
+    IRPFileError,                 # File operation failures
+    IRPJobError,                  # Job management errors
+    IRPDataBridgeError,           # Data Bridge base error
+    IRPDataBridgeConnectionError, # SQL Server connection failures
+    IRPDataBridgeQueryError,      # SQL query execution failures
 )
 ```
 

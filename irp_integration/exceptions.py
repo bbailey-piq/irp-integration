@@ -69,3 +69,33 @@ class IRPJobError(IRPIntegrationError):
     or result fetching encounters issues.
     """
     pass
+
+
+class IRPDataBridgeError(IRPIntegrationError):
+    """
+    Data Bridge (SQL Server) operation errors.
+
+    Base exception for all SQL Server / Data Bridge failures
+    including connection, configuration, and query errors.
+    """
+    pass
+
+
+class IRPDataBridgeConnectionError(IRPDataBridgeError):
+    """
+    Data Bridge connection errors.
+
+    Raised when SQL Server connection fails (bad credentials,
+    unreachable server, driver not installed).
+    """
+    pass
+
+
+class IRPDataBridgeQueryError(IRPDataBridgeError):
+    """
+    Data Bridge query execution errors.
+
+    Raised when SQL query execution fails, parameter substitution
+    fails, or SQL file cannot be read.
+    """
+    pass

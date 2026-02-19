@@ -23,6 +23,7 @@ from .reference_data import ReferenceDataManager
 from .rdm import RDMManager
 from .import_job import ImportJobManager
 from .export_job import ExportJobManager
+from .databridge import DataBridgeManager
 
 class IRPClient:
     """Main client for IRP integration providing access to all managers."""
@@ -39,10 +40,11 @@ class IRPClient:
         self.rdm = RDMManager(self._client)
         self.import_job = ImportJobManager(self._client)
         self.export_job = ExportJobManager(self._client)
+        self.databridge = DataBridgeManager()
 
     @property
     def client(self):
         """Get the underlying API client."""
         return self._client
 
-__all__ = ['IRPClient', '__version__']
+__all__ = ['IRPClient', 'DataBridgeManager', '__version__']
