@@ -23,7 +23,10 @@ from .reference_data import ReferenceDataManager
 from .rdm import RDMManager
 from .import_job import ImportJobManager
 from .export_job import ExportJobManager
-from .databridge import DataBridgeManager
+try:
+    from .databridge import DataBridgeManager
+except ImportError:
+    DataBridgeManager = None
 
 class IRPClient:
     """Main client for IRP integration providing access to all managers."""
@@ -40,7 +43,8 @@ class IRPClient:
         self.rdm = RDMManager(self._client)
         self.import_job = ImportJobManager(self._client)
         self.export_job = ExportJobManager(self._client)
-        self.databridge = DataBridgeManager()
+        if DataBridgeManager is not None:
+            self.databridge = DataBridgeManager()
 
     @property
     def client(self):
